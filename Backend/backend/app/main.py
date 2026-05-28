@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -16,6 +17,7 @@ from app.api.v1.router import api_router
 from app.core.config import reload_settings, settings
 from app.core.logger import configure_logging, get_logger
 from app.lifecycle import run_startup_checks
+from app.websocket.connection_manager import manager
 
 
 logger = get_logger(__name__)
@@ -41,8 +43,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Starting GuardAIian backend", extra={"env": settings.APP_ENV})
 
     await run_startup_checks()
+    pubsub_task: asyncio.Task[None] | None = None
+    if settings.REDIS_URL:
+        pubsub_task = asyncio.create_task(manager.start_pubsub_listener())
 
     yield
+
+    await manager.close()
+    if pubsub_task is not None:
+        pubsub_task.cancel()
+        try:
+            await pubsub_task
+        except asyncio.CancelledError:
+            pass
 
     logger.info("Shutting down GuardAIian backend")
 

@@ -3,7 +3,8 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 
-from fastapi import HTTPException, status
+from fastapi import status
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
@@ -28,9 +29,9 @@ class InMemoryRateLimitMiddleware(BaseHTTPMiddleware):
         while bucket and now - bucket[0] > 60:
             bucket.popleft()
         if len(bucket) >= settings.RATE_LIMIT_REQUESTS_PER_MINUTE:
-            raise HTTPException(
+            return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Rate limit exceeded",
+                content={"detail": "Rate limit exceeded"},
             )
         bucket.append(now)
         return await call_next(request)
@@ -46,9 +47,9 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if not settings.REDIS_URL:
             if settings.is_production or settings.RATE_LIMIT_FAIL_CLOSED:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Distributed rate limiting is not configured.",
+                    content={"detail": "Distributed rate limiting is not configured."},
                 )
             return await call_next(request)
 
@@ -68,16 +69,16 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         except Exception:
             logger.exception("Redis rate limit check failed")
             if settings.RATE_LIMIT_FAIL_CLOSED or settings.is_production:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Rate limiting service unavailable.",
+                    content={"detail": "Rate limiting service unavailable."},
                 )
             return await call_next(request)
 
         if request_count > settings.RATE_LIMIT_REQUESTS_PER_MINUTE:
-            raise HTTPException(
+            return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Rate limit exceeded",
+                content={"detail": "Rate limit exceeded"},
             )
         return await call_next(request)
 

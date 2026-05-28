@@ -29,7 +29,7 @@ class DetectionPipeline:
 
     async def analyze(self, request: AnalyzeRequest) -> AnalyzeResponse:
         normalized = preprocess_prompt(request.prompt)
-        history = session_memory.get_history(request.session_id)
+        history = await session_memory.get_history(request.session_id)
 
         semantic_score, semantic_category, matches = await self.semantic_matcher.match(normalized)
         policy_score, policy_reasons, policy_category = score_policy_violations(normalized)
@@ -81,7 +81,7 @@ class DetectionPipeline:
             session_id=request.session_id,
             request_id=str(uuid.uuid4()),
         )
-        session_memory.add_turn(
+        await session_memory.add_turn(
             request.session_id,
             SessionTurn(
                 prompt=normalized,
